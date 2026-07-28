@@ -1,0 +1,50 @@
+{
+  "name": "reseat",
+  "version": "0.1.0",
+  "description": "Reseat your coding session in the other agent — sync sessions between Claude Code and Codex. Zero tokens, zero dependencies.",
+  "type": "module",
+  "bin": {
+    "reseat": "dist/bin/reseat.js"
+  },
+  "files": [
+    "dist/bin",
+    "dist/src",
+    "assets/logo.svg"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && cd dist && node --test",
+    "e2e": "npm run build && node dist/tools/e2e.js",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "claude-code",
+    "codex",
+    "session",
+    "sync",
+    "handoff",
+    "resume",
+    "ai-agents",
+    "cli",
+    "rate-limit",
+    "usage-limit"
+  ],
+  "author": "vuplea",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vuplea/reseat.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vuplea/reseat/issues"
+  },
+  "homepage": "https://github.com/vuplea/reseat#readme",
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "typescript": "^7.0.2"
+  }
+}

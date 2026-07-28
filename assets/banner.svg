@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" role="img" aria-label="reseat — Claude Code and Codex, one conversation">
+  <defs>
+    <radialGradient id="bseam" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#A5F3FC" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#A5F3FC" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bfade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0E1626"/>
+      <stop offset="1" stop-color="#0B1220"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="640" fill="url(#bfade)"/>
+  <g transform="translate(255 320) scale(3.55) translate(-64 -61)">
+    <ellipse cx="64" cy="61" rx="56" ry="20" fill="url(#bseam)"/>
+    <path d="M28 28H100L90 48H38Z" fill="#FFB020" stroke="#FFB020" stroke-width="8" stroke-linejoin="round"/>
+    <path d="M51 74H77L64 100Z" fill="#22D3EE" stroke="#22D3EE" stroke-width="8" stroke-linejoin="round"/>
+    <rect x="16" y="54" width="96" height="14" rx="7" fill="#CBD5E1"/>
+    <rect x="26" y="58" width="76" height="6" rx="3" fill="#0B1220"/>
+  </g>
+  <g font-family="Cascadia Code, Consolas, DejaVu Sans Mono, monospace">
+    <text x="520" y="308" font-size="126" font-weight="700" fill="#F1F5F9" letter-spacing="-3">reseat</text>
+    <text x="524" y="376" font-size="30" fill="#93A6C4">Claude Code &#8646; Codex &#8212; one conversation.</text>
+    <text x="524" y="438" font-size="24" fill="#5E7195">Pull your coding session out of one agent,</text>
+    <text x="524" y="472" font-size="24" fill="#5E7195">seat it in the other. Zero tokens, native resume.</text>
+  </g>
+</svg>

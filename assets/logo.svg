@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="reseat logo: a session passing through a socket, changing color at the seam">
+  <defs>
+    <radialGradient id="seam" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#A5F3FC" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#A5F3FC" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="#0B1220"/>
+  <ellipse cx="64" cy="61" rx="56" ry="20" fill="url(#seam)"/>
+  <path d="M28 28H100L90 48H38Z" fill="#FFB020" stroke="#FFB020" stroke-width="8" stroke-linejoin="round"/>
+  <path d="M51 74H77L64 100Z" fill="#22D3EE" stroke="#22D3EE" stroke-width="8" stroke-linejoin="round"/>
+  <rect x="16" y="54" width="96" height="14" rx="7" fill="#CBD5E1"/>
+  <rect x="26" y="58" width="76" height="6" rx="3" fill="#0B1220"/>
+</svg>
