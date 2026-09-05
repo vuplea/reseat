@@ -42,9 +42,18 @@ newer work and carries it back into Claude Code.
 ## Install
 
 ```sh
-npx github:vuplea/reseat            # run once in a project directory (needs git on PATH)
-npm install -g github:vuplea/reseat # or keep it as `reseat`
+npx github:vuplea/reseat   # run once in a project directory (needs git on PATH)
 ```
+
+To keep it around as `reseat`, install from a clone. The clone *is* the install (npm links
+it), so `git pull && npm install` inside it updates the command:
+
+```sh
+git clone https://github.com/vuplea/reseat && cd reseat && npm install && npm install -g .
+```
+
+`npm install -g github:vuplea/reseat` does **not** work: npm builds git packages through a
+nested install that runs in global mode, so the TypeScript toolchain is never present.
 
 Runs anywhere Node.js 20+ runs (CI covers Linux and Windows). The only other
 requirement is the [Codex](https://github.com/openai/codex) CLI, and only for
