@@ -140,15 +140,13 @@ try {
   console.log("\n4. Work continues in Codex → carried back to Claude Code");
   const rollout2 = await newestRollout();
   if (!rollout2) throw new Error("no rollout found after the second import");
-  await appendFile(rollout2, `${JSON.stringify({
+  // Recorded the way codex-cli 0.147+ writes turns: `item_completed` events.
+  const codexItem = (type: "UserMessage" | "AgentMessage", text: string) => JSON.stringify({
     timestamp: new Date().toISOString(),
     type: "event_msg",
-    payload: { type: "user_message", message: "Also support forced direction." },
-  })}\n${JSON.stringify({
-    timestamp: new Date().toISOString(),
-    type: "event_msg",
-    payload: { type: "agent_message", message: "Added as --to." },
-  })}\n`);
+    payload: { type: "item_completed", item: { id: randomUUID(), type, content: [{ type: type === "UserMessage" ? "text" : "Text", text }] } },
+  });
+  await appendFile(rollout2, `${codexItem("UserMessage", "Also support forced direction.")}\n${codexItem("AgentMessage", "Added as --to.")}\n`);
   const sync3 = reseat(project);
   check(sync3.code === 0, "third sync exits 0");
   check(/Codex → Claude Code/.test(sync3.out), "direction is Codex → Claude Code");

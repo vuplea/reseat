@@ -58,7 +58,7 @@ nested install that runs in global mode, so the TypeScript toolchain is never pr
 Runs anywhere Node.js 20+ runs (CI covers Linux and Windows). The only other
 requirement is the [Codex](https://github.com/openai/codex) CLI, and only for
 the Claude Code → Codex direction — recent enough to expose the app-server
-import API (validated with codex-cli 0.144; an older Codex fails fast with a
+import API (validated with codex-cli 0.144 through 0.153; an older Codex fails fast with a
 clear message). Claude Code itself is never invoked; reseat just reads and
 writes its session files.
 
@@ -87,6 +87,8 @@ switch seats; it's a no-op when there's nothing new.
   to the picker.)
 - **Codex → Claude Code** converts the rollout's visible conversation into Claude Code's
   session JSONL, which `claude --resume` picks up natively.
+- Codex subagent threads run in the project's cwd too; they never count as the project's
+  session — only the thread you talk to does.
 - Per-project state (fingerprints of the last-synced sessions) prevents a fresh import from
   bouncing straight back, and sessions reseat created are marked so they never count as new
   work until you actually continue them.
@@ -117,7 +119,7 @@ way with `--to`.
 suite that drives the real `codex app-server` (`tools/e2e.ts`), live `codex exec resume` /
 `claude --resume` round-trips, and a read-only sweep of a real machine's stores (100 Codex
 rollouts, 222 Claude Code sessions — zero parse failures). Format assumptions were checked
-against the codex-rs source, with Claude Code 2.1 and codex-cli 0.144. Please open an issue
+against the codex-rs source and real rollouts, with Claude Code 2.1 and codex-cli 0.144 through 0.153. Please open an issue
 if your platform or version misbehaves.
 
 **What if I run it twice at once?** Don't — there's deliberately no cross-process lock (it's

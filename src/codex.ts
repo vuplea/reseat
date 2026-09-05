@@ -35,11 +35,12 @@ export interface RolloutMeta {
   cwd: string | null;
   source: string | null;
   originator: string | null;
+  threadSource: string | null;
 }
 
-/** The `session_meta` header of a rollout: `{ id, cwd, source, originator }`. */
+/** The `session_meta` header of a rollout: `{ id, cwd, source, originator, thread_source }`. */
 export async function inspectRollout(file: string): Promise<RolloutMeta> {
-  const result: RolloutMeta = { id: null, cwd: null, source: null, originator: null };
+  const result: RolloutMeta = { id: null, cwd: null, source: null, originator: null, threadSource: null };
   await readJsonLines(file, (record) => {
     if (record?.type !== "session_meta") return undefined;
     const payload = record.payload ?? {};
@@ -47,6 +48,7 @@ export async function inspectRollout(file: string): Promise<RolloutMeta> {
     result.cwd = payload.cwd ? String(payload.cwd) : null;
     result.source = payload.source ? String(payload.source) : null;
     result.originator = payload.originator ? String(payload.originator) : null;
+    result.threadSource = payload.thread_source ? String(payload.thread_source) : null;
     return false;
   });
   return result;
@@ -55,8 +57,9 @@ export async function inspectRollout(file: string): Promise<RolloutMeta> {
 /**
  * Newest rollout for this project that actually contains conversation.
  * Codex writes `session_meta` the moment it starts, so opened-and-abandoned
- * rollouts are routine; they carry nothing to sync and are skipped. Files
- * that vanish mid-scan are skipped too.
+ * rollouts are routine; they carry nothing to sync and are skipped. Subagent
+ * threads are skipped too: they share the project's cwd but hold a worker's
+ * task, not the user's conversation. So are files that vanish mid-scan.
  */
 export async function latestRollout(projectPath: string): Promise<string | null> {
   const projectKey = normalizeProject(projectPath);
@@ -64,6 +67,7 @@ export async function latestRollout(projectPath: string): Promise<string | null>
     try {
       const meta = await inspectRollout(candidate.file);
       if (!meta.cwd || normalizeProject(meta.cwd) !== projectKey) continue;
+      if (meta.threadSource === "subagent") continue;
       if (await hasVisibleTurns(candidate.file)) return candidate.file;
     } catch {
       continue;
@@ -76,20 +80,10 @@ export async function latestRollout(projectPath: string): Promise<string | null>
 export async function hasVisibleTurns(file: string): Promise<boolean> {
   let found = false;
   await readJsonLines(file, (record) => {
-    const payload = record?.payload ?? {};
-    if (record?.type === "event_msg" && ["user_message", "agent_message"].includes(payload.type)) {
-      const text = String(payload.message ?? "").trim();
-      if (text && text !== IMPORT_MARKER) {
-        found = true;
-        return false;
-      }
-    } else if (record?.type === "response_item" && payload.type === "message"
-      && ["user", "assistant"].includes(payload.role)) {
-      const text = messageText(payload.content);
-      if (text && !(payload.role === "user" && isInjectedContext(text))) {
-        found = true;
-        return false;
-      }
+    const event = eventTurn(record);
+    if (event ? event.text !== IMPORT_MARKER : responseTurn(record)) {
+      found = true;
+      return false;
     }
     return undefined;
   });
@@ -105,51 +99,73 @@ export async function rolloutForSession(sessionId: string): Promise<string | nul
   return files[0] ?? null;
 }
 
+/** Turn roles of Codex's turn events by event type: pre-0.147 rollouts, and what its importer still writes. */
+const EVENT_ROLES: Record<string, Turn["role"]> = { user_message: "user", agent_message: "assistant" };
+
+/** Turn roles of `item_completed` events by item type: codex-cli 0.147 and later. */
+const ITEM_ROLES: Record<string, Turn["role"]> = { UserMessage: "user", AgentMessage: "assistant" };
+
 /**
- * Context blocks Codex injects as user-role response items (real prompts
- * arrive as `event_msg` records in current Codex; the fallback only matters
- * for old rollouts). Matched by envelope so a genuine user prompt that
- * happens to start with markup isn't dropped.
+ * The prompt or reply an `event_msg` record carries, if any. Codex emits
+ * these only for real turns, never for injected context, so they are the
+ * clean source of a rollout's visible conversation.
+ */
+function eventTurn(record: any): Turn | undefined {
+  if (record?.type !== "event_msg") return undefined;
+  const payload = record.payload ?? {};
+  const item = payload.type === "item_completed" ? payload.item ?? {} : null;
+  const role = item ? ITEM_ROLES[item.type] : EVENT_ROLES[payload.type];
+  if (!role) return undefined;
+  const text = item ? messageText(item.content) : String(payload.message ?? "").trim();
+  return text ? { role, text, timestamp: record.timestamp } : undefined;
+}
+
+/**
+ * Context blocks Codex injects as user-role response items. Matched by
+ * envelope so a genuine user prompt that happens to start with markup isn't
+ * dropped.
  */
 const INJECTED_CONTEXT = /^<(user_instructions|environment_context|ENVIRONMENT_CONTEXT|recommended_plugins|permissions|skills_instructions|INSTRUCTIONS)[\s>]/;
 
-function isInjectedContext(text: string): boolean {
-  return INJECTED_CONTEXT.test(text);
+/**
+ * The prompt or reply a user/assistant `response_item` message carries, if
+ * any: the fallback for rollouts without turn events. User-role records also
+ * carry injected context envelopes; those are dropped.
+ */
+function responseTurn(record: any): Turn | undefined {
+  const payload = record?.payload ?? {};
+  if (record?.type !== "response_item" || payload.type !== "message") return undefined;
+  const role = payload.role;
+  if (role !== "user" && role !== "assistant") return undefined;
+  const text = messageText(payload.content);
+  if (!text || (role === "user" && INJECTED_CONTEXT.test(text))) return undefined;
+  return { role, text, timestamp: record.timestamp };
 }
 
-function appendTurn(turns: Turn[], role: unknown, text: unknown, timestamp?: string): void {
-  const value = String(text ?? "").trim();
-  if (!value || (role !== "user" && role !== "assistant")) return;
+function appendTurn(turns: Turn[], turn: Turn): void {
   const previous = turns.at(-1);
-  if (previous?.role === role) {
-    previous.text += `\n\n${value}`;
+  if (previous?.role === turn.role) {
+    previous.text += `\n\n${turn.text}`;
   } else {
-    turns.push({ role, text: value, timestamp });
+    turns.push({ ...turn });
   }
 }
 
 /**
- * The visible conversation of a rollout as `{ role, text, timestamp }` turns.
- *
- * `event_msg` records are the clean source: Codex emits them only for real
- * user prompts and assistant replies. Old rollouts without them fall back to
- * `response_item` messages, where user-role records also carry injected
- * context envelopes; those are dropped there.
+ * The visible conversation of a rollout as `{ role, text, timestamp }` turns,
+ * consecutive same-role turns merged: from turn events when the rollout has
+ * any, else from response items.
  */
 export async function parseTurns(file: string): Promise<Turn[]> {
   const events: Turn[] = [];
   const responseItems: Turn[] = [];
   await readJsonLines(file, (record) => {
-    const payload = record?.payload ?? {};
-    if (record?.type === "event_msg" && payload.type === "user_message") {
-      appendTurn(events, "user", payload.message, record.timestamp);
-    } else if (record?.type === "event_msg" && payload.type === "agent_message") {
-      if (String(payload.message ?? "").trim() === IMPORT_MARKER) return undefined;
-      appendTurn(events, "assistant", payload.message, record.timestamp);
-    } else if (record?.type === "response_item" && payload.type === "message") {
-      const text = messageText(payload.content);
-      if (payload.role === "user" && isInjectedContext(text)) return undefined;
-      appendTurn(responseItems, payload.role, text, record.timestamp);
+    const event = eventTurn(record);
+    if (event) {
+      if (event.text !== IMPORT_MARKER) appendTurn(events, event);
+    } else {
+      const item = responseTurn(record);
+      if (item) appendTurn(responseItems, item);
     }
     return undefined;
   });
@@ -158,20 +174,18 @@ export async function parseTurns(file: string): Promise<Turn[]> {
 
 /** A short human title for the rollout: its first real user prompt. */
 export async function extractTitle(file: string): Promise<string | null> {
-  let fallback: string | null = null;
   let title: string | null = null;
+  let fallback: string | null = null;
   await readJsonLines(file, (record) => {
-    const payload = record?.payload ?? {};
-    if (record?.type === "event_msg" && payload.type === "user_message") {
-      const text = String(payload.message ?? "").replace(/\s+/g, " ").trim();
-      if (text && !text.startsWith("<")) {
-        title = text.slice(0, 100);
-        return false;
-      }
-    } else if (!fallback && record?.type === "response_item" && payload.type === "message" && payload.role === "user") {
-      const text = messageText(payload.content).replace(/\s+/g, " ").trim();
-      if (text && !text.startsWith("<")) fallback = text.slice(0, 100);
+    const event = eventTurn(record);
+    const turn = event ?? responseTurn(record);
+    if (turn?.role !== "user" || turn.text.startsWith("<")) return undefined;
+    const text = turn.text.replace(/\s+/g, " ").slice(0, 100);
+    if (event) {
+      title = text;
+      return false;
     }
+    fallback ??= text;
     return undefined;
   });
   return title ?? fallback;
@@ -188,15 +202,14 @@ export async function isUnextendedImport(file: string): Promise<boolean> {
   let sawMarker = false;
   let extended = false;
   await readJsonLines(file, (record) => {
-    const payload = record?.payload ?? {};
     if (record?.type === "session_meta") {
-      imported = String(payload.originator ?? "") === ORIGINATOR;
+      imported = String(record.payload?.originator ?? "") === ORIGINATOR;
       return imported ? undefined : false;
     }
-    if (record?.type === "event_msg" && payload.type === "agent_message"
-      && String(payload.message ?? "").trim() === IMPORT_MARKER) {
+    const turn = eventTurn(record);
+    if (turn?.role === "assistant" && turn.text === IMPORT_MARKER) {
       sawMarker = true;
-    } else if (record?.type === "event_msg" && payload.type === "user_message" && sawMarker) {
+    } else if (turn?.role === "user" && sawMarker) {
       extended = true;
       return false;
     }

@@ -112,7 +112,7 @@ export function messageText(content: any): string {
   if (typeof content === "string") return content.trim();
   if (!Array.isArray(content)) return "";
   return content
-    .filter((item) => item && ["text", "input_text", "output_text"].includes(item.type))
+    .filter((item) => item && ["text", "Text", "input_text", "output_text"].includes(item.type))
     .map((item) => String(item.text ?? "").trim())
     .filter(Boolean)
     .join("\n\n");

@@ -105,6 +105,23 @@ export function codexAgentEvent(message: string, timestamp = "2026-07-26T10:02:0
   return { timestamp, type: "event_msg", payload: { type: "agent_message", message } };
 }
 
+/** `item_completed` turn records: how codex-cli 0.147+ writes prompts and replies. */
+export function codexUserItem(text: string, timestamp = "2026-07-26T10:01:00.000Z"): Record<string, any> {
+  return codexItem("UserMessage", "text", text, timestamp);
+}
+
+export function codexAgentItem(text: string, timestamp = "2026-07-26T10:02:00.000Z"): Record<string, any> {
+  return codexItem("AgentMessage", "Text", text, timestamp);
+}
+
+function codexItem(type: string, contentType: string, text: string, timestamp: string): Record<string, any> {
+  return {
+    timestamp,
+    type: "event_msg",
+    payload: { type: "item_completed", item: { id: randomUUID(), type, content: [{ type: contentType, text }] } },
+  };
+}
+
 export function codexResponseItem(role: string, text: string, timestamp = "2026-07-26T10:01:00.000Z"): Record<string, any> {
   return {
     timestamp,
@@ -116,7 +133,7 @@ export function codexResponseItem(role: string, text: string, timestamp = "2026-
 /**
  * Records shaped like a rollout Codex creates when reseat imports a Claude
  * session: the history replayed as turn events, closed by Codex's
- * end-of-import marker (verified against codex-cli 0.144).
+ * end-of-import marker (verified against codex-cli 0.144 and 0.153).
  */
 export function codexImportedRollout(
   cwd: string,

@@ -9,10 +9,12 @@ import {
 } from "../src/codex.js";
 import {
   codexAgentEvent,
+  codexAgentItem,
   codexImportedRollout,
   codexMetaRecord,
   codexResponseItem,
   codexUserEvent,
+  codexUserItem,
   temporaryStores,
   writeCodexFixture,
 } from "./helpers.js";
@@ -52,6 +54,24 @@ test("parseTurns falls back to response items and drops injected user context", 
   ]);
 });
 
+test("parseTurns reads item_completed turns (codex-cli 0.147+) over the response items", async (t) => {
+  const stores = await temporaryStores(t);
+  const file = await writeCodexFixture(stores, [
+    codexMetaRecord(stores.project, { cli_version: "0.153.4" }),
+    codexResponseItem("user", "# AGENTS.md instructions\n\n<INSTRUCTIONS>\nrules\n</INSTRUCTIONS>"),
+    codexResponseItem("user", "real question"),
+    codexUserItem("real question"),
+    codexResponseItem("assistant", "real answer"),
+    codexAgentItem("real answer"),
+    codexAgentItem("Which runtime should this target?"),
+  ]);
+  const turns = await parseTurns(file);
+  assert.deepEqual(turns.map((turn) => [turn.role, turn.text]), [
+    ["user", "real question"],
+    ["assistant", "real answer\n\nWhich runtime should this target?"],
+  ]);
+});
+
 test("latestRollout matches on normalized cwd and picks the newest", async (t) => {
   const stores = await temporaryStores(t);
   await writeCodexFixture(stores, [codexMetaRecord("/somewhere/else"), codexUserEvent("x")], {
@@ -67,6 +87,18 @@ test("latestRollout matches on normalized cwd and picks the newest", async (t) =
   assert.notEqual(older, newest);
 });
 
+test("latestRollout skips subagent threads, which share the project's cwd", async (t) => {
+  const stores = await temporaryStores(t);
+  const main = await writeCodexFixture(stores, [codexMetaRecord(stores.project), codexUserItem("a")], {
+    mtime: new Date("2026-07-26T09:00:00Z"),
+  });
+  await writeCodexFixture(stores, [
+    codexMetaRecord(stores.project, { thread_source: "subagent", source: { subagent: { thread_spawn: { depth: 1 } } } }),
+    codexAgentItem("working on the subtask"),
+  ], { mtime: new Date("2026-07-26T11:00:00Z") });
+  assert.equal(await latestRollout(stores.project), main);
+});
+
 test("inspectRollout reads the session_meta header", async (t) => {
   const stores = await temporaryStores(t);
   const file = await writeCodexFixture(stores, [
@@ -77,16 +109,19 @@ test("inspectRollout reads the session_meta header", async (t) => {
   assert.equal(meta.cwd, stores.project);
   assert.equal(meta.originator, "codex-tui");
   assert.equal(meta.source, "cli");
+  assert.equal(meta.threadSource, "user");
 });
 
 test("extractTitle uses the first real user prompt", async (t) => {
   const stores = await temporaryStores(t);
-  const file = await writeCodexFixture(stores, [
-    codexMetaRecord(stores.project),
-    codexResponseItem("user", "<user_instructions>skip me</user_instructions>"),
-    codexUserEvent("  please   fix\nthe build "),
-  ]);
-  assert.equal(await extractTitle(file), "please fix the build");
+  for (const prompt of [codexUserEvent, codexUserItem]) {
+    const file = await writeCodexFixture(stores, [
+      codexMetaRecord(stores.project),
+      codexResponseItem("user", "<user_instructions>skip me</user_instructions>"),
+      prompt("  please   fix\nthe build "),
+    ]);
+    assert.equal(await extractTitle(file), "please fix the build");
+  }
 });
 
 test("isUnextendedImport: reseat import is pure until a prompt lands after the marker", async (t) => {
@@ -94,11 +129,10 @@ test("isUnextendedImport: reseat import is pure until a prompt lands after the m
   const pureImport = await writeCodexFixture(stores, codexImportedRollout(stores.project));
   assert.equal(await isUnextendedImport(pureImport), true);
 
-  const extended = await writeCodexFixture(stores, [
-    ...codexImportedRollout(stores.project),
-    codexUserEvent("continued in codex"),
-  ]);
-  assert.equal(await isUnextendedImport(extended), false);
+  for (const prompt of [codexUserEvent, codexUserItem]) {
+    const extended = await writeCodexFixture(stores, [...codexImportedRollout(stores.project), prompt("continued in codex")]);
+    assert.equal(await isUnextendedImport(extended), false);
+  }
 
   const native = await writeCodexFixture(stores, [
     codexMetaRecord(stores.project),
@@ -111,8 +145,8 @@ test("parseTurns drops Codex's end-of-import marker", async (t) => {
   const stores = await temporaryStores(t);
   const file = await writeCodexFixture(stores, [
     ...codexImportedRollout(stores.project, [["user", "imported ask"], ["assistant", "imported reply"]]),
-    codexUserEvent("new ask"),
-    codexAgentEvent("new reply"),
+    codexUserItem("new ask"),
+    codexAgentItem("new reply"),
   ]);
   const turns = await parseTurns(file);
   assert.deepEqual(turns.map((turn) => [turn.role, turn.text]), [
