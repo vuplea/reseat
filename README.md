@@ -119,8 +119,8 @@ way with `--to`.
 suite that drives the real `codex app-server` (`tools/e2e.ts`), live `codex exec resume` /
 `claude --resume` round-trips, and a read-only sweep of a real machine's stores (100 Codex
 rollouts, 222 Claude Code sessions — zero parse failures). Format assumptions were checked
-against the codex-rs source and real rollouts, with Claude Code 2.1 and codex-cli 0.144 through 0.153. Please open an issue
-if your platform or version misbehaves.
+against the codex-rs source and real rollouts, with Claude Code 2.1 and codex-cli 0.144
+through 0.153. Please open an issue if your platform or version misbehaves.
 
 **What if I run it twice at once?** Don't — there's deliberately no cross-process lock (it's
 a manual CLI); the worst case is a duplicate session on the target side.
