@@ -16,6 +16,9 @@ export const ORIGINATOR = "reseat";
  */
 export const IMPORT_MARKER = "<EXTERNAL SESSION IMPORTED>";
 
+/** Rendered tool output is capped per call so a long Codex thread stays resumable. */
+export const TOOL_OUTPUT_LIMIT = 8000;
+
 function isRolloutFile(name: string): boolean {
   return name.startsWith("rollout-") && name.endsWith(".jsonl");
 }
@@ -142,6 +145,60 @@ function responseTurn(record: any): Turn | undefined {
   return { role, text, timestamp: record.timestamp };
 }
 
+/**
+ * A Codex tool call or its output as assistant text, tagged the way Codex's
+ * importer tags Claude Code's tool calls. Neither agent can replay the
+ * other's tools, but the record of what ran and what came back carries.
+ */
+function toolTurn(record: any): Turn | undefined {
+  if (record?.type !== "response_item") return undefined;
+  const payload = record.payload ?? {};
+  let text: string;
+  switch (payload.type) {
+    case "custom_tool_call":
+    case "function_call":
+      text = tagged("codex_tool_call", `: ${payload.name}`, String(payload.input ?? payload.arguments ?? "").trimEnd());
+      break;
+    case "custom_tool_call_output":
+    case "function_call_output":
+      text = tagged("codex_tool_result", "", truncate(toolOutputText(payload.output)));
+      break;
+    default:
+      return undefined;
+  }
+  return { role: "assistant", text, timestamp: record.timestamp };
+}
+
+function tagged(tag: string, label: string, body: string): string {
+  return `[${tag}${label}]\n${body}\n[/${tag}]`;
+}
+
+/** Tool output is a string (function calls) or text blocks (custom tools). */
+function toolOutputText(output: unknown): string {
+  const blocks: unknown[] = Array.isArray(output) ? output.map((block) => block?.text) : [output];
+  return blocks
+    .map((block) => unwrapChunk(typeof block === "string" ? block : JSON.stringify(block ?? "")).trimEnd())
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** The exec tool reports its result as JSON text `{ exit_code, output, … }`; keep the output. */
+function unwrapChunk(text: string): string {
+  if (!text.trimStart().startsWith("{")) return text;
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed?.output === "string") return parsed.output;
+  } catch {
+    // Plain output that happens to start with a brace.
+  }
+  return text;
+}
+
+function truncate(text: string): string {
+  if (text.length <= TOOL_OUTPUT_LIMIT) return text;
+  return `${text.slice(0, TOOL_OUTPUT_LIMIT)}\n[… ${text.length - TOOL_OUTPUT_LIMIT} more characters]`;
+}
+
 function appendTurn(turns: Turn[], turn: Turn): void {
   const previous = turns.at(-1);
   if (previous?.role === turn.role) {
@@ -153,23 +210,32 @@ function appendTurn(turns: Turn[], turn: Turn): void {
 
 /**
  * The visible conversation of a rollout as `{ role, text, timestamp }` turns,
- * consecutive same-role turns merged: from turn events when the rollout has
- * any, else from response items.
+ * tool calls and their output rendered into the assistant turns and
+ * consecutive same-role turns merged. Turn events are the source when the
+ * rollout has any, else response items.
  */
 export async function parseTurns(file: string): Promise<Turn[]> {
   const events: Turn[] = [];
   const responseItems: Turn[] = [];
+  let sawEvent = false;
   await readJsonLines(file, (record) => {
     const event = eventTurn(record);
     if (event) {
+      sawEvent = true;
       if (event.text !== IMPORT_MARKER) appendTurn(events, event);
-    } else {
-      const item = responseTurn(record);
-      if (item) appendTurn(responseItems, item);
+      return undefined;
     }
+    const tool = toolTurn(record);
+    if (tool) {
+      appendTurn(events, tool);
+      appendTurn(responseItems, tool);
+      return undefined;
+    }
+    const item = responseTurn(record);
+    if (item) appendTurn(responseItems, item);
     return undefined;
   });
-  return events.length ? events : responseItems;
+  return sawEvent ? events : responseItems;
 }
 
 /** A short human title for the rollout: its first real user prompt. */

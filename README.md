@@ -94,9 +94,11 @@ switch seats; it's a no-op when there's nothing new.
   work until you actually continue them.
 
 What carries over is the **conversation** — your prompts and the agent's replies, in both
-directions. Tool calls, diffs, and permissions don't transfer (the two CLIs' tool models are
-incompatible); your files on disk are already the shared ground truth, and the incoming agent
-re-reads what it needs.
+directions — and a text record of tool use: Codex's importer renders Claude Code's tool calls
+and results as tagged messages, and reseat renders Codex's commands and their output (capped
+at 8 KB per call) the same way going back. Neither agent can replay the other's tools, so
+nothing is re-executed and permissions don't transfer; your files on disk are already the
+shared ground truth.
 
 No existing session is ever modified or deleted: reseat only creates new sessions on the
 target side (plus its own small state file, and — via the import — Codex's usual thread

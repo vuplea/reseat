@@ -6,6 +6,7 @@ import {
   isUnextendedImport,
   latestRollout,
   parseTurns,
+  TOOL_OUTPUT_LIMIT,
 } from "../src/codex.js";
 import {
   codexAgentEvent,
@@ -13,6 +14,7 @@ import {
   codexImportedRollout,
   codexMetaRecord,
   codexResponseItem,
+  codexResponseRecord,
   codexUserEvent,
   codexUserItem,
   temporaryStores,
@@ -70,6 +72,42 @@ test("parseTurns reads item_completed turns (codex-cli 0.147+) over the response
     ["user", "real question"],
     ["assistant", "real answer\n\nWhich runtime should this target?"],
   ]);
+});
+
+test("parseTurns renders tool calls and their output as tagged assistant text", async (t) => {
+  const stores = await temporaryStores(t);
+  const chunk = JSON.stringify({ chunk_id: "a8b7a5", exit_code: 0, output: " M README.md\n" });
+  const file = await writeCodexFixture(stores, [
+    codexMetaRecord(stores.project),
+    codexUserItem("what changed?"),
+    codexResponseRecord({ type: "custom_tool_call", name: "exec", call_id: "call_1", input: 'text(await tools.exec_command({cmd:"git status --short"}));' }),
+    codexResponseRecord({ type: "custom_tool_call_output", call_id: "call_1", output: [{ type: "input_text", text: "Script completed\nOutput:\n" }, { type: "input_text", text: chunk }] }),
+    codexResponseRecord({ type: "function_call", name: "shell_command", call_id: "call_2", arguments: '{"command":"ls"}' }),
+    codexResponseRecord({ type: "function_call_output", call_id: "call_2", output: "a.txt" }),
+    codexAgentItem("README.md is modified."),
+  ]);
+  const turns = await parseTurns(file);
+  assert.deepEqual(turns.map((turn) => [turn.role, turn.text]), [
+    ["user", "what changed?"],
+    ["assistant", [
+      '[codex_tool_call: exec]\ntext(await tools.exec_command({cmd:"git status --short"}));\n[/codex_tool_call]',
+      "[codex_tool_result]\nScript completed\nOutput:\n M README.md\n[/codex_tool_result]",
+      '[codex_tool_call: shell_command]\n{"command":"ls"}\n[/codex_tool_call]',
+      "[codex_tool_result]\na.txt\n[/codex_tool_result]",
+      "README.md is modified.",
+    ].join("\n\n")],
+  ]);
+});
+
+test("parseTurns caps each tool output", async (t) => {
+  const stores = await temporaryStores(t);
+  const file = await writeCodexFixture(stores, [
+    codexMetaRecord(stores.project),
+    codexUserItem("run it"),
+    codexResponseRecord({ type: "function_call_output", call_id: "call_1", output: "x".repeat(TOOL_OUTPUT_LIMIT + 1000) }),
+  ]);
+  const [, tool] = await parseTurns(file);
+  assert.equal(tool.text, `[codex_tool_result]\n${"x".repeat(TOOL_OUTPUT_LIMIT)}\n[… 1000 more characters]\n[/codex_tool_result]`);
 });
 
 test("latestRollout matches on normalized cwd and picks the newest", async (t) => {

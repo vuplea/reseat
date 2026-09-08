@@ -122,12 +122,15 @@ function codexItem(type: string, contentType: string, text: string, timestamp: s
   };
 }
 
+export function codexResponseRecord(payload: Record<string, any>, timestamp = "2026-07-26T10:01:00.000Z"): Record<string, any> {
+  return { timestamp, type: "response_item", payload };
+}
+
 export function codexResponseItem(role: string, text: string, timestamp = "2026-07-26T10:01:00.000Z"): Record<string, any> {
-  return {
+  return codexResponseRecord(
+    { type: "message", role, content: [{ type: role === "user" ? "input_text" : "output_text", text }] },
     timestamp,
-    type: "response_item",
-    payload: { type: "message", role, content: [{ type: role === "user" ? "input_text" : "output_text", text }] },
-  };
+  );
 }
 
 /**
