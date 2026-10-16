@@ -62,7 +62,7 @@ test("a prompt landing between plan and perform is transferred, not lost", async
   })}\n`);
   await utimes(rollout, new Date(), new Date());
   const created = await perform(stores.project, decision);
-  const written = await readFile(created.file, "utf8");
+  const written = await readFile(created.claude!.file, "utf8");
   assert.match(written, /landed mid-sync/, "the late turn must be carried over");
   const again = await plan(stores.project);
   assert.equal(again.action, "none", "and the sync must be recorded as complete");
@@ -75,14 +75,14 @@ test("forcing an unchanged source again reports already-synced instead of duplic
     codexUserEvent("work"),
     codexAgentEvent("done"),
   ]);
-  const first = await plan(stores.project, { to: "claude" });
+  const first = await plan(stores.project, { to: ["claude"] });
   assert.ok(first.action === "sync");
   const created = await perform(stores.project, first);
 
-  const second = await plan(stores.project, { to: "claude" });
+  const second = await plan(stores.project, { to: ["claude"] });
   assert.ok(second.action === "none");
   assert.equal(second.reason, "already-synced");
-  assert.equal(second.createdSessionId, created.sessionId);
+  assert.equal(second.skipped?.claude, created.claude!.sessionId);
   const files = await readdir(path.join(stores.claudeProjects, projectDirectoryName(stores.project)));
   assert.equal(files.length, 1, "no duplicate session may be written");
 });

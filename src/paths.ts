@@ -25,6 +25,18 @@ export function codexSessionsRoot(): string {
   return path.join(base, "sessions");
 }
 
+/**
+ * Root of pi's session storage (per-project subdirectories). Honors pi's
+ * own PI_CODING_AGENT_DIR relocation; RESEAT_PI_SESSIONS overrides both.
+ * (pi's PI_CODING_AGENT_SESSION_DIR flattens the store into one directory
+ * and is deliberately not honored here.)
+ */
+export function piSessionsRoot(): string {
+  if (process.env.RESEAT_PI_SESSIONS) return process.env.RESEAT_PI_SESSIONS;
+  const base = process.env.PI_CODING_AGENT_DIR ?? path.join(HOME, ".pi", "agent");
+  return path.join(base, "sessions");
+}
+
 /** Where reseat remembers per-project sync state. */
 export function stateFile(): string {
   if (process.env.RESEAT_STATE) return process.env.RESEAT_STATE;

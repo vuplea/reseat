@@ -121,6 +121,33 @@ export async function isUnextendedImport(file: string): Promise<boolean> {
 }
 
 /**
+ * The visible conversation of a Claude Code session as `{ role, text,
+ * timestamp }` turns. Meta records, injected context envelopes, and command
+ * transcripts are dropped; consecutive same-role records merge, mirroring
+ * how the other agents parse their history.
+ */
+export async function parseTurns(file: string): Promise<Turn[]> {
+  const turns: Turn[] = [];
+  await readJsonLines(file, (record) => {
+    const role = record.type;
+    if (role !== "user" && role !== "assistant") return undefined;
+    const text = messageText(record.message?.content);
+    if (!text) return undefined;
+    if (role === "user" && (record.isMeta || text.startsWith("<") || text.startsWith("Caveat:"))) {
+      return undefined;
+    }
+    const previous = turns.at(-1);
+    if (previous && previous.role === role) {
+      previous.text += `\n\n${text}`;
+    } else {
+      turns.push({ role, text, timestamp: record.timestamp });
+    }
+    return undefined;
+  });
+  return turns;
+}
+
+/**
  * A short human title for the session: the first real user prompt, with
  * command transcripts and injected context skipped.
  */

@@ -1,7 +1,7 @@
 {
   "name": "reseat",
-  "version": "0.1.0",
-  "description": "Reseat your coding session in the other agent — sync sessions between Claude Code and Codex. Zero tokens, zero dependencies.",
+  "version": "0.2.0",
+  "description": "Reseat your coding session in the other agent — sync sessions between Claude Code, Codex, and pi. Zero tokens, zero dependencies.",
   "type": "module",
   "bin": {
     "reseat": "dist/bin/reseat.js"
@@ -24,6 +24,8 @@
   "keywords": [
     "claude-code",
     "codex",
+    "pi",
+    "pi-coding-agent",
     "session",
     "sync",
     "handoff",
